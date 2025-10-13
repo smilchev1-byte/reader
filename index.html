@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="bg">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ArticleBody Extractor</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <style>
+    :root {
+      --bg: #f4f4f4;
+      --text: #222;
+      --card-bg: #ffffff;
+      --btn-bg: #0066cc;
+      --btn-text: #ffffff;
+    }
+
+    body.dark {
+      --bg: #1e1e1e;
+      --text: #ddd;
+      --card-bg: #2a2a2a;
+      --btn-bg: #444;
+      --btn-text: #eee;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: Georgia, "Times New Roman", serif;
+      padding: 20px;
+      margin: 0 auto;
+      max-width: 800px;
+      transition: background 0.3s, color 0.3s;
+    }
+
+    h2 {
+      margin-bottom: 20px;
+      font-family: sans-serif;
+      font-size: 22px;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 12px;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      box-sizing: border-box;
+    }
+
+    button {
+      margin-top: 12px;
+      padding: 10px 20px;
+      font-size: 16px;
+      background: var(--btn-bg);
+      color: var(--btn-text);
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+
+    button:hover {
+      opacity: 0.9;
+    }
+
+    #status {
+      font-size: 14px;
+      color: #888;
+      margin-top: 12px;
+      font-style: italic;
+    }
+
+    #output {
+      margin-top: 30px;
+      background: var(--card-bg);
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+
+    .article p {
+      margin: 0 0 1.2em 0;
+      font-size: 18px;
+      line-height: 1.6;
+    }
+
+    .article p.lead {
+      font-weight: bold;
+      font-size: 20px;
+    }
+
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .article img {
+      max-width: 100%;
+      border-radius: 6px;
+      margin-bottom: 20px;
+      display: block;
+    }
+  </style>
+</head>
+<body class="dark">
+  <div class="top-bar">
+    <h2>Извличане на съдържание от "articleBody"</h2>
+    <button onclick="toggleTheme()">🌙 Тъмна / ☀️ Светла</button>
+  </div>
+
+  <input id="urlInput" type="text" placeholder="Въведи URL на статия..." />
+  <button onclick="extractArticleBody()">Извлечи</button>
+  <div id="status"></div>
+  <div id="output" class="article"></div>
+
+<script>
+function toggleTheme() {
+  document.body.classList.toggle('dark');
+}
+
+function splitIntoSentenceParagraphs(text, groupSize = 3) {
+  const sentenceRegex = /[^.!?]+[.!?]+["']?\s*/g;
+  const sentences = text.match(sentenceRegex) || [text];
+  const groups = [];
+
+  for (let i = 0; i < sentences.length; i += groupSize) {
+    const group = sentences.slice(i, i + groupSize).join(' ').trim();
+    if (group) groups.push(group);
+  }
+
+  return groups;
+}
+
+async function extractArticleBody() {
+  const url = document.getElementById('urlInput').value.trim();
+  const output = document.getElementById('output');
+  const status = document.getElementById('status');
+  output.innerHTML = '';
+  status.textContent = '⏳ Зарежда се...';
+
+  try {
+    const res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`);
+    const html = await res.text();
+
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    const pictureEl = doc.querySelector('picture.img--title.landscape');
+    let imageHTML = pictureEl ? pictureEl.outerHTML : '';
+
+    const ldJsonMatches = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
+    let articleText = null;
+
+    if (ldJsonMatches) {
+      for (let match of ldJsonMatches) {
+        try {
+          const jsonText = match.match(/<script[^>]*>([\s\S]*?)<\/script>/i)[1];
+          const data = JSON.parse(jsonText);
+
+          if (Array.isArray(data)) {
+            for (let item of data) {
+              if (item.articleBody) {
+                articleText = item.articleBody;
+                break;
+              }
+            }
+          } else if (data.articleBody) {
+            articleText = data.articleBody;
+          }
+        } catch (e) {}
+        if (articleText) break;
+      }
+    }
+
+    if (articleText) {
+      const grouped = splitIntoSentenceParagraphs(articleText, 3);
+      const formattedText = grouped.map((g, i) =>
+        `<p class="${i === 0 ? 'lead' : ''}">${g}</p>`
+      ).join('');
+
+      output.innerHTML = `${imageHTML}${formattedText}`;
+      status.textContent = '✅ Успешно извлечено.';
+    } else {
+      status.textContent = '❌ Не е намерено "articleBody".';
+    }
+  } catch (err) {
+    status.textContent = '❌ Грешка: ' + err.message;
+  }
+}
+
+// ✅ PWA Service Worker
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js')
+    .then(() => console.log('✅ Service Worker регистриран'))
+    .catch(err => console.error('SW грешка:', err));
+}
+</script>
+</body>
+</html>
