@@ -22,25 +22,10 @@
     </aside>
 
     <main>
-      <!-- Pull-to-refresh -->
-      <div id="ptr" aria-hidden="true">
-        <div class="ptr-inner">
-          <span class="ptr-icon">↓</span>
-          <span class="ptr-text">Изтегли за обновяване</span>
-        </div>
-      </div>
-
       <!-- Top bar -->
       <div class="top">
         <button id="menuToggle" class="icon-btn" aria-label="Отвори меню">☰</button>
-
-        <div class="import-actions">
-          <label class="btn file-btn">
-            Качи .html
-            <input id="fileInput" type="file" accept=".html,.htm,text/html" hidden>
-          </label>
-          <button id="btnPaste" class="btn">Постави HTML</button>
-        </div>
+        <h2 class="headline">Последни новини</h2>
       </div>
 
       <div id="status" class="status"></div>
@@ -64,7 +49,7 @@
       <!-- News list -->
       <div id="list" class="list">
         <div class="placeholder">
-          Използвай <b>менюто</b> или <b>Качи HTML</b>. Ще се извлече съдържанието автоматично.
+          Използвай <b>менюто</b> отляво, за да заредиш новини.
         </div>
       </div>
     </main>
@@ -99,6 +84,7 @@ function fixRelativeURLs(node, baseHref){
   return node;
 }
 
+// ===== Избор и визуализация на новини
 function selectRawBlocks(doc){
   return Array.from(doc.querySelectorAll('div.card.pt-4.pb-4.ad0, div.card.pt-4.pb-4.ad3'));
 }
@@ -109,15 +95,14 @@ function toCardElement(rawHTML, baseHref){
   sanitize(wrap);
   fixRelativeURLs(wrap, baseHref);
 
-  let imgSrc = wrap.querySelector('img')?.src || null;
-  let title = wrap.querySelector('h1,h2,h3')?.innerText?.trim() || '';
-  let link = wrap.querySelector('a[href]')?.getAttribute('href') || '';
-  let dateText = wrap.querySelector('time[datetime]')?.getAttribute('datetime') || '';
-  let formattedDate = '';
-  if(dateText){ const d = new Date(dateText); if(!isNaN(d)) formattedDate = d.toLocaleString('bg-BG',{dateStyle:'medium'}); }
-
+  const imgSrc = wrap.querySelector('img')?.src || '';
+  const title = wrap.querySelector('h1,h2,h3')?.innerText?.trim() || '(без заглавие)';
+  const link = wrap.querySelector('a[href]')?.getAttribute('href') || '';
+  const dateText = wrap.querySelector('time[datetime]')?.getAttribute('datetime') || '';
   const breadcrumb = wrap.querySelector('li.breadcrumb-item.d-lg-inline.mb-1');
   const category = breadcrumb ? breadcrumb.textContent.trim() : '';
+  let formattedDate = '';
+  if(dateText){ const d = new Date(dateText); if(!isNaN(d)) formattedDate = d.toLocaleString('bg-BG',{dateStyle:'medium'}); }
 
   const card = document.createElement('div');
   card.className='card-row';
@@ -157,7 +142,7 @@ function renderCardsFromDoc(doc, baseHref){
   populateCategories();
 }
 
-// Sidebar
+// ===== Sidebar
 async function loadSidebar(){
   try{
     const html = await fetch('sidebar.html').then(r=>r.text());
@@ -181,22 +166,7 @@ document.addEventListener('click',e=>{
   }
 });
 
-// File + Paste
-$('#fileInput').addEventListener('change',async e=>{
-  const f=e.target.files[0]; if(!f)return;
-  const html=await f.text(); renderCardsFromDoc(parseHTML(html),'file:///'+f.name);
-  setStatus('✅ Качен файл.'); e.target.value='';
-});
-$('#btnPaste').addEventListener('click',async()=>{
-  try{
-    const text=await navigator.clipboard.readText();
-    if(!text.includes('<'))return setStatus('Буферът не съдържа HTML.');
-    renderCardsFromDoc(parseHTML(text),location.href);
-    setStatus('✅ Поставен HTML.');
-  }catch(e){setStatus('❌ Грешка: '+e.message);}
-});
-
-// Reader
+// ===== Reader
 const reader=$('#reader'), readerContent=$('#readerContent');
 $('#readerClose').addEventListener('click',()=>reader.style.display='none');
 reader.addEventListener('click',e=>{if(e.target.classList.contains('reader-backdrop'))reader.style.display='none';});
@@ -212,7 +182,7 @@ async function openReader(url){
   reader.style.display='block';}
 }
 
-// Филтри
+// ===== Филтри
 document.querySelectorAll('.chip').forEach(b=>b.addEventListener('click',()=>{
   document.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));
   b.classList.add('active'); applyDateFilter(b.dataset.filter);
@@ -227,7 +197,7 @@ function applyDateFilter(f){
   });
 }
 
-// Категории
+// ===== Категории
 const catSel=$('#categorySelect');
 function populateCategories(){
   const cats=new Set();document.querySelectorAll('.card-row[data-category]').forEach(c=>cats.add(c.dataset.category));
