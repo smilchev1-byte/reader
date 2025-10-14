@@ -1,204 +1,243 @@
 <!doctype html>
 <html lang="bg">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ArticleBody Extractor</title>
-  <link rel="manifest" href="manifest.json">
-  <link rel="apple-touch-icon" href="icon.png">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="mobile-web-app-capable" content="yes">
-  <style>
-    :root {
-      --bg: #f4f4f4;
-      --text: #222;
-      --card-bg: #ffffff;
-      --btn-bg: #0066cc;
-      --btn-text: #ffffff;
-    }
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Моите новини</title>
+<link rel="stylesheet" href="style.css">
 
-    body.dark {
-      --bg: #1e1e1e;
-      --text: #ddd;
-      --card-bg: #2a2a2a;
-      --btn-bg: #444;
-      --btn-text: #eee;
-    }
-
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: Georgia, "Times New Roman", serif;
-      padding: 20px;
-      margin: 0 auto;
-      max-width: 800px;
-      transition: background 0.3s, color 0.3s;
-    }
-
-    h2 {
-      margin-bottom: 20px;
-      font-family: sans-serif;
-      font-size: 22px;
-    }
-
-    input[type="text"] {
-      width: 100%;
-      padding: 12px;
-      font-size: 16px;
-      border: 1px solid #ccc;
-      border-radius: 6px;
-      box-sizing: border-box;
-    }
-
-    button {
-      margin-top: 12px;
-      padding: 10px 20px;
-      font-size: 16px;
-      background: var(--btn-bg);
-      color: var(--btn-text);
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: background 0.3s;
-    }
-
-    button:hover {
-      opacity: 0.9;
-    }
-
-    #status {
-      font-size: 14px;
-      color: #888;
-      margin-top: 12px;
-      font-style: italic;
-    }
-
-    #output {
-      margin-top: 30px;
-      background: var(--card-bg);
-      padding: 20px;
-      border-radius: 8px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-    }
-
-    .article p {
-      margin: 0 0 1.2em 0;
-      font-size: 18px;
-      line-height: 1.6;
-    }
-
-    .article p.lead {
-      font-weight: bold;
-      font-size: 20px;
-    }
-
-    .top-bar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 10px;
-    }
-
-    .article img {
-      max-width: 100%;
-      border-radius: 6px;
-      margin-bottom: 20px;
-      display: block;
-    }
-  </style>
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0f1418">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 </head>
-<body class="dark">
-  <div class="top-bar">
-    <h2>Извличане на съдържание от "articleBody"</h2>
-    <button onclick="toggleTheme()">🌙 Тъмна / ☀️ Светла</button>
+<body>
+  <div class="app">
+    <!-- Sidebar -->
+    <aside id="sidebar" aria-label="Навигация">
+      <div class="brand">📰 Моите новини</div>
+      <div style="color:#999">Зареждам меню...</div>
+    </aside>
+
+    <main>
+      <!-- Pull-to-refresh -->
+      <div id="ptr" aria-hidden="true">
+        <div class="ptr-inner">
+          <span class="ptr-icon">↓</span>
+          <span class="ptr-text">Изтегли за обновяване</span>
+        </div>
+      </div>
+
+      <!-- Top bar -->
+      <div class="top">
+        <button id="menuToggle" class="icon-btn" aria-label="Отвори меню">☰</button>
+
+        <div class="import-actions">
+          <label class="btn file-btn">
+            Качи .html
+            <input id="fileInput" type="file" accept=".html,.htm,text/html" hidden>
+          </label>
+          <button id="btnPaste" class="btn">Постави HTML</button>
+        </div>
+      </div>
+
+      <div id="status" class="status"></div>
+
+      <!-- Filters -->
+      <section class="filters">
+        <div class="time-filters scroller">
+          <button class="chip" data-filter="today">Днес</button>
+          <button class="chip" data-filter="week">Тази седмица</button>
+          <button class="chip" data-filter="month">Този месец</button>
+          <button class="chip active" data-filter="all">Всички</button>
+        </div>
+        <div class="category-filter">
+          <label for="categorySelect" class="cat-label">Категория:</label>
+          <select id="categorySelect">
+            <option value="all">Всички</option>
+          </select>
+        </div>
+      </section>
+
+      <!-- News list -->
+      <div id="list" class="list">
+        <div class="placeholder">
+          Използвай <b>менюто</b> или <b>Качи HTML</b>. Ще се извлече съдържанието автоматично.
+        </div>
+      </div>
+    </main>
   </div>
 
-  <input id="urlInput" type="text" placeholder="Въведи URL на статия..." />
-  <button onclick="extractArticleBody()">Извлечи</button>
-  <div id="status"></div>
-  <div id="output" class="article"></div>
+  <!-- Reader -->
+  <div id="reader" class="reader" style="display:none" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="reader-backdrop"></div>
+    <div class="reader-panel">
+      <div class="reader-bar">
+        <div class="reader-title">Четец</div>
+        <div class="reader-actions">
+          <button id="readerClose" class="btn">Затвори</button>
+        </div>
+      </div>
+      <div id="readerContent" class="reader-content"></div>
+    </div>
+  </div>
 
 <script>
-function toggleTheme() {
-  document.body.classList.toggle('dark');
+const $ = s => document.querySelector(s);
+const statusEl = $('#status'), listEl = $('#list'), sidebarEl = $('#sidebar');
+function setStatus(msg){ statusEl.textContent = msg || ''; }
+function clearList(){ listEl.innerHTML=''; }
+function placeholder(msg){ const d=document.createElement('div'); d.className='placeholder'; d.innerHTML=msg; listEl.appendChild(d); }
+function parseHTML(html){ return new DOMParser().parseFromString(html,'text/html'); }
+function absURL(base, rel){ try{ return new URL(rel, base).href }catch{ return rel } }
+function sanitize(node){ node.querySelectorAll('script,style,iframe,object,embed,noscript').forEach(n=>n.remove()); return node; }
+function fixRelativeURLs(node, baseHref){
+  node.querySelectorAll('[href]').forEach(a=> a.setAttribute('href', absURL(baseHref, a.getAttribute('href'))));
+  node.querySelectorAll('[src]').forEach(el=> el.setAttribute('src', absURL(baseHref, el.getAttribute('src'))));
+  return node;
 }
 
-function splitIntoSentenceParagraphs(text, groupSize = 3) {
-  const sentenceRegex = /[^.!?]+[.!?]+["']?\s*/g;
-  const sentences = text.match(sentenceRegex) || [text];
-  const groups = [];
-
-  for (let i = 0; i < sentences.length; i += groupSize) {
-    const group = sentences.slice(i, i + groupSize).join(' ').trim();
-    if (group) groups.push(group);
-  }
-
-  return groups;
+function selectRawBlocks(doc){
+  return Array.from(doc.querySelectorAll('div.card.pt-4.pb-4.ad0, div.card.pt-4.pb-4.ad3'));
 }
 
-async function extractArticleBody() {
-  const url = document.getElementById('urlInput').value.trim();
-  const output = document.getElementById('output');
-  const status = document.getElementById('status');
-  output.innerHTML = '';
-  status.textContent = '⏳ Зарежда се...';
+function toCardElement(rawHTML, baseHref){
+  const fragDoc = parseHTML('<div id="wrap">'+rawHTML+'</div>');
+  const wrap = fragDoc.getElementById('wrap');
+  sanitize(wrap);
+  fixRelativeURLs(wrap, baseHref);
 
-  try {
+  let imgSrc = wrap.querySelector('img')?.src || null;
+  let title = wrap.querySelector('h1,h2,h3')?.innerText?.trim() || '';
+  let link = wrap.querySelector('a[href]')?.getAttribute('href') || '';
+  let dateText = wrap.querySelector('time[datetime]')?.getAttribute('datetime') || '';
+  let formattedDate = '';
+  if(dateText){ const d = new Date(dateText); if(!isNaN(d)) formattedDate = d.toLocaleString('bg-BG',{dateStyle:'medium'}); }
+
+  const breadcrumb = wrap.querySelector('li.breadcrumb-item.d-lg-inline.mb-1');
+  const category = breadcrumb ? breadcrumb.textContent.trim() : '';
+
+  const card = document.createElement('div');
+  card.className='card-row';
+  if(dateText) card.dataset.date = dateText;
+  if(category) card.dataset.category = category;
+
+  card.innerHTML = `
+    <div class="thumb">${imgSrc?`<img src="${imgSrc}" alt="">`:'<span>no image</span>'}</div>
+    <div class="right-side">
+      <div class="header-row">
+        <h3 class="title"><a href="#">${title}</a></h3>
+        ${formattedDate?`<div class="meta-date">🕒 ${formattedDate}</div>`:''}
+      </div>
+      <div class="meta">${category?`Категория: ${category}`:''}</div>
+    </div>`;
+  card.querySelector('a').addEventListener('click', e=>{ e.preventDefault(); openReader(link); });
+  return card;
+}
+
+async function importURL(url){
+  if(!url){ setStatus('Няма URL.'); return; }
+  setStatus('⏳ Зареждане...');
+  try{
     const res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`);
     const html = await res.text();
+    const doc = parseHTML(html);
+    renderCardsFromDoc(doc, url);
+    setStatus('✅ Готово.');
+  }catch(e){ setStatus('❌ Грешка: '+e.message); }
+}
 
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, 'text/html');
-    const pictureEl = doc.querySelector('picture.img--title.landscape');
-    let imageHTML = pictureEl ? pictureEl.outerHTML : '';
+function renderCardsFromDoc(doc, baseHref){
+  const raw = selectRawBlocks(doc);
+  clearList();
+  if(!raw.length){ placeholder('Няма намерени елементи.'); return; }
+  raw.forEach(node => listEl.appendChild(toCardElement(node.outerHTML, baseHref)));
+  populateCategories();
+}
 
-    const ldJsonMatches = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
-    let articleText = null;
+// Sidebar
+async function loadSidebar(){
+  try{
+    const html = await fetch('sidebar.html').then(r=>r.text());
+    sidebarEl.innerHTML = html;
+    sidebarEl.addEventListener('click', e=>{
+      const target = e.target.closest('[data-url]');
+      if(!target) return;
+      e.preventDefault();
+      importURL(target.getAttribute('data-url'));
+      document.body.classList.remove('sidebar-open');
+    });
+  }catch{ sidebarEl.innerHTML='<div class="placeholder">❌ Не успях да заредя sidebar.html</div>'; }
+}
+loadSidebar();
 
-    if (ldJsonMatches) {
-      for (let match of ldJsonMatches) {
-        try {
-          const jsonText = match.match(/<script[^>]*>([\s\S]*?)<\/script>/i)[1];
-          const data = JSON.parse(jsonText);
-
-          if (Array.isArray(data)) {
-            for (let item of data) {
-              if (item.articleBody) {
-                articleText = item.articleBody;
-                break;
-              }
-            }
-          } else if (data.articleBody) {
-            articleText = data.articleBody;
-          }
-        } catch (e) {}
-        if (articleText) break;
-      }
-    }
-
-    if (articleText) {
-      const grouped = splitIntoSentenceParagraphs(articleText, 3);
-      const formattedText = grouped.map((g, i) =>
-        `<p class="${i === 0 ? 'lead' : ''}">${g}</p>`
-      ).join('');
-
-      output.innerHTML = `${imageHTML}${formattedText}`;
-      status.textContent = '✅ Успешно извлечено.';
-    } else {
-      status.textContent = '❌ Не е намерено "articleBody".';
-    }
-  } catch (err) {
-    status.textContent = '❌ Грешка: ' + err.message;
+$('#menuToggle').addEventListener('click',()=>document.body.classList.toggle('sidebar-open'));
+document.addEventListener('click',e=>{
+  if(document.body.classList.contains('sidebar-open')){
+    if(!$('#sidebar').contains(e.target)&&!$('#menuToggle').contains(e.target))
+      document.body.classList.remove('sidebar-open');
   }
+});
+
+// File + Paste
+$('#fileInput').addEventListener('change',async e=>{
+  const f=e.target.files[0]; if(!f)return;
+  const html=await f.text(); renderCardsFromDoc(parseHTML(html),'file:///'+f.name);
+  setStatus('✅ Качен файл.'); e.target.value='';
+});
+$('#btnPaste').addEventListener('click',async()=>{
+  try{
+    const text=await navigator.clipboard.readText();
+    if(!text.includes('<'))return setStatus('Буферът не съдържа HTML.');
+    renderCardsFromDoc(parseHTML(text),location.href);
+    setStatus('✅ Поставен HTML.');
+  }catch(e){setStatus('❌ Грешка: '+e.message);}
+});
+
+// Reader
+const reader=$('#reader'), readerContent=$('#readerContent');
+$('#readerClose').addEventListener('click',()=>reader.style.display='none');
+reader.addEventListener('click',e=>{if(e.target.classList.contains('reader-backdrop'))reader.style.display='none';});
+async function openReader(url){
+  setStatus('⏳ Зареждам статия...');
+  const prox=`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+  const res=await fetch(prox); const html=await res.text(); const doc=parseHTML(html);
+  const ld=html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
+  let articleText=null,dateText='';
+  if(ld){for(let m of ld){try{const j=JSON.parse(m.match(/<script[^>]*>([\s\S]*?)<\/script>/i)[1]);
+  if(j.articleBody){articleText=j.articleBody;dateText=j.datePublished||'';break;}}catch{}}}
+  if(articleText){readerContent.innerHTML=`${dateText?`<div class='reader-date'>🕒 ${dateText}</div>`:''}<p>${articleText}</p>`;
+  reader.style.display='block';}
 }
 
-// ✅ PWA Service Worker
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js')
-    .then(() => console.log('✅ Service Worker регистриран'))
-    .catch(err => console.error('SW грешка:', err));
+// Филтри
+document.querySelectorAll('.chip').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); applyDateFilter(b.dataset.filter);
+}));
+function applyDateFilter(f){
+  const now=new Date();document.querySelectorAll('.card-row').forEach(c=>{
+    const d=new Date(c.dataset.date);let s=true;
+    if(f==='today')s=d.toDateString()===now.toDateString();
+    if(f==='week')s=(now-d)/(1000*60*60*24)<=7;
+    if(f==='month')s=(now-d)/(1000*60*60*24)<=31;
+    c.style.display=s?'':'none';
+  });
 }
+
+// Категории
+const catSel=$('#categorySelect');
+function populateCategories(){
+  const cats=new Set();document.querySelectorAll('.card-row[data-category]').forEach(c=>cats.add(c.dataset.category));
+  catSel.innerHTML='<option value="all">Всички</option>'+[...cats].map(c=>`<option>${c}</option>`).join('');
+}
+catSel.addEventListener('change',()=>{
+  const sel=catSel.value;document.querySelectorAll('.card-row').forEach(c=>{
+    c.style.display=(sel==='all'||c.dataset.category===sel)?'':'none';
+  });
+});
 </script>
 </body>
 </html>
