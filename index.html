@@ -1,213 +1,46 @@
 <!doctype html>
 <html lang="bg">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Моите новини</title>
-<link rel="stylesheet" href="style.css">
-
-<!-- PWA -->
-<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#0f1418">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Site News</title>
+  <link rel="stylesheet" href="./css/style.css">
+  <link rel="icon" type="image/png" href="./images/favicon.png">
+  <link rel="apple-touch-icon" href="./images/apple-touch-icon.png">
 </head>
 <body>
   <div class="app">
-    <!-- Sidebar -->
-    <aside id="sidebar" aria-label="Навигация">
+    <aside id="sidebar">
       <div class="brand">📰 Моите новини</div>
-      <div style="color:#999">Зареждам меню...</div>
+      <div class="cats-loading">Зареждане...</div>
     </aside>
 
-    <main>
-      <!-- Top bar -->
+    <main id="main">
       <div class="top">
-        <button id="menuToggle" class="icon-btn" aria-label="Отвори меню">☰</button>
+        <div class="left-actions">
+          <button id="menuToggle" class="icon-btn">☰</button>
+          <button id="collapseToggle" class="icon-btn desktop-only">⟨⟩</button>
+        </div>
         <h2 class="headline">Последни новини</h2>
       </div>
 
-      <div id="status" class="status"></div>
-
-      <!-- Filters -->
-      <section class="filters">
-        <div class="time-filters scroller">
-          <button class="chip" data-filter="today">Днес</button>
-          <button class="chip" data-filter="week">Тази седмица</button>
-          <button class="chip" data-filter="month">Този месец</button>
-          <button class="chip active" data-filter="all">Всички</button>
-        </div>
-        <div class="category-filter">
-          <label for="categorySelect" class="cat-label">Категория:</label>
-          <select id="categorySelect">
-            <option value="all">Всички</option>
-          </select>
-        </div>
-      </section>
-
-      <!-- News list -->
-      <div id="list" class="list">
-        <div class="placeholder">
-          Използвай <b>менюто</b> отляво, за да заредиш новини.
+      <div class="filters">
+        <div class="scroller">
+          <div class="chip active" data-filter="today">Днес</div>
+          <div class="chip" data-filter="week">Тази седмица</div>
+          <div class="chip" data-filter="month">Този месец</div>
+          <div class="chip" data-filter="all">Всички</div>
         </div>
       </div>
+
+      <div id="status"></div>
+      <div id="articles" class="list"></div>
     </main>
   </div>
 
-  <!-- Reader -->
-  <div id="reader" class="reader" style="display:none" aria-hidden="true" role="dialog" aria-modal="true">
-    <div class="reader-backdrop"></div>
-    <div class="reader-panel">
-      <div class="reader-bar">
-        <div class="reader-title">Четец</div>
-        <div class="reader-actions">
-          <button id="readerClose" class="btn">Затвори</button>
-        </div>
-      </div>
-      <div id="readerContent" class="reader-content"></div>
-    </div>
-  </div>
-
-<script>
-const $ = s => document.querySelector(s);
-const statusEl = $('#status'), listEl = $('#list'), sidebarEl = $('#sidebar');
-function setStatus(msg){ statusEl.textContent = msg || ''; }
-function clearList(){ listEl.innerHTML=''; }
-function placeholder(msg){ const d=document.createElement('div'); d.className='placeholder'; d.innerHTML=msg; listEl.appendChild(d); }
-function parseHTML(html){ return new DOMParser().parseFromString(html,'text/html'); }
-function absURL(base, rel){ try{ return new URL(rel, base).href }catch{ return rel } }
-function sanitize(node){ node.querySelectorAll('script,style,iframe,object,embed,noscript').forEach(n=>n.remove()); return node; }
-function fixRelativeURLs(node, baseHref){
-  node.querySelectorAll('[href]').forEach(a=> a.setAttribute('href', absURL(baseHref, a.getAttribute('href'))));
-  node.querySelectorAll('[src]').forEach(el=> el.setAttribute('src', absURL(baseHref, el.getAttribute('src'))));
-  return node;
-}
-
-// ===== Избор и визуализация на новини
-function selectRawBlocks(doc){
-  return Array.from(doc.querySelectorAll('div.card.pt-4.pb-4.ad0, div.card.pt-4.pb-4.ad3'));
-}
-
-function toCardElement(rawHTML, baseHref){
-  const fragDoc = parseHTML('<div id="wrap">'+rawHTML+'</div>');
-  const wrap = fragDoc.getElementById('wrap');
-  sanitize(wrap);
-  fixRelativeURLs(wrap, baseHref);
-
-  const imgSrc = wrap.querySelector('img')?.src || '';
-  const title = wrap.querySelector('h1,h2,h3')?.innerText?.trim() || '(без заглавие)';
-  const link = wrap.querySelector('a[href]')?.getAttribute('href') || '';
-  const dateText = wrap.querySelector('time[datetime]')?.getAttribute('datetime') || '';
-  const breadcrumb = wrap.querySelector('li.breadcrumb-item.d-lg-inline.mb-1');
-  const category = breadcrumb ? breadcrumb.textContent.trim() : '';
-  let formattedDate = '';
-  if(dateText){ const d = new Date(dateText); if(!isNaN(d)) formattedDate = d.toLocaleString('bg-BG',{dateStyle:'medium'}); }
-
-  const card = document.createElement('div');
-  card.className='card-row';
-  if(dateText) card.dataset.date = dateText;
-  if(category) card.dataset.category = category;
-
-  card.innerHTML = `
-    <div class="thumb">${imgSrc?`<img src="${imgSrc}" alt="">`:'<span>no image</span>'}</div>
-    <div class="right-side">
-      <div class="header-row">
-        <h3 class="title"><a href="#">${title}</a></h3>
-        ${formattedDate?`<div class="meta-date">🕒 ${formattedDate}</div>`:''}
-      </div>
-      <div class="meta">${category?`Категория: ${category}`:''}</div>
-    </div>`;
-  card.querySelector('a').addEventListener('click', e=>{ e.preventDefault(); openReader(link); });
-  return card;
-}
-
-async function importURL(url){
-  if(!url){ setStatus('Няма URL.'); return; }
-  setStatus('⏳ Зареждане...');
-  try{
-    const res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`);
-    const html = await res.text();
-    const doc = parseHTML(html);
-    renderCardsFromDoc(doc, url);
-    setStatus('✅ Готово.');
-  }catch(e){ setStatus('❌ Грешка: '+e.message); }
-}
-
-function renderCardsFromDoc(doc, baseHref){
-  const raw = selectRawBlocks(doc);
-  clearList();
-  if(!raw.length){ placeholder('Няма намерени елементи.'); return; }
-  raw.forEach(node => listEl.appendChild(toCardElement(node.outerHTML, baseHref)));
-  populateCategories();
-}
-
-// ===== Sidebar
-async function loadSidebar(){
-  try{
-    const html = await fetch('sidebar.html').then(r=>r.text());
-    sidebarEl.innerHTML = html;
-    sidebarEl.addEventListener('click', e=>{
-      const target = e.target.closest('[data-url]');
-      if(!target) return;
-      e.preventDefault();
-      importURL(target.getAttribute('data-url'));
-      document.body.classList.remove('sidebar-open');
-    });
-  }catch{ sidebarEl.innerHTML='<div class="placeholder">❌ Не успях да заредя sidebar.html</div>'; }
-}
-loadSidebar();
-
-$('#menuToggle').addEventListener('click',()=>document.body.classList.toggle('sidebar-open'));
-document.addEventListener('click',e=>{
-  if(document.body.classList.contains('sidebar-open')){
-    if(!$('#sidebar').contains(e.target)&&!$('#menuToggle').contains(e.target))
-      document.body.classList.remove('sidebar-open');
-  }
-});
-
-// ===== Reader
-const reader=$('#reader'), readerContent=$('#readerContent');
-$('#readerClose').addEventListener('click',()=>reader.style.display='none');
-reader.addEventListener('click',e=>{if(e.target.classList.contains('reader-backdrop'))reader.style.display='none';});
-async function openReader(url){
-  setStatus('⏳ Зареждам статия...');
-  const prox=`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-  const res=await fetch(prox); const html=await res.text(); const doc=parseHTML(html);
-  const ld=html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
-  let articleText=null,dateText='';
-  if(ld){for(let m of ld){try{const j=JSON.parse(m.match(/<script[^>]*>([\s\S]*?)<\/script>/i)[1]);
-  if(j.articleBody){articleText=j.articleBody;dateText=j.datePublished||'';break;}}catch{}}}
-  if(articleText){readerContent.innerHTML=`${dateText?`<div class='reader-date'>🕒 ${dateText}</div>`:''}<p>${articleText}</p>`;
-  reader.style.display='block';}
-}
-
-// ===== Филтри
-document.querySelectorAll('.chip').forEach(b=>b.addEventListener('click',()=>{
-  document.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));
-  b.classList.add('active'); applyDateFilter(b.dataset.filter);
-}));
-function applyDateFilter(f){
-  const now=new Date();document.querySelectorAll('.card-row').forEach(c=>{
-    const d=new Date(c.dataset.date);let s=true;
-    if(f==='today')s=d.toDateString()===now.toDateString();
-    if(f==='week')s=(now-d)/(1000*60*60*24)<=7;
-    if(f==='month')s=(now-d)/(1000*60*60*24)<=31;
-    c.style.display=s?'':'none';
-  });
-}
-
-// ===== Категории
-const catSel=$('#categorySelect');
-function populateCategories(){
-  const cats=new Set();document.querySelectorAll('.card-row[data-category]').forEach(c=>cats.add(c.dataset.category));
-  catSel.innerHTML='<option value="all">Всички</option>'+[...cats].map(c=>`<option>${c}</option>`).join('');
-}
-catSel.addEventListener('change',()=>{
-  const sel=catSel.value;document.querySelectorAll('.card-row').forEach(c=>{
-    c.style.display=(sel==='all'||c.dataset.category===sel)?'':'none';
-  });
-});
-</script>
+  <script src="./js/utils.js"></script>
+  <script src="./js/reader.js"></script>
+  <script src="./js/parser.js"></script>
+  <script src="./js/main.js"></script>
 </body>
 </html>
