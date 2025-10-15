@@ -2,11 +2,11 @@
 <html lang="bg">
 <head>
   <meta charset="utf-8">
-  <title>Новинарски Reader (gtag-feed-statia)</title>
+  <title>Новинарски Reader с articleBody JSON-LD</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
     body{
-      font:16px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      font:16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
       margin:1.5rem;
       color:#111;
       background:#fafafa;
@@ -30,7 +30,7 @@
     }
     .item:hover{background:#f0f6ff}
     .item img{width:120px;height:80px;object-fit:cover;border-radius:.5rem}
-    .item a{color:#0047ab;text-decoration:none;font-weight:600}
+    .item .title{font-weight:600;color:#0047ab}
     .item small{display:block;color:#666;margin-top:.25rem}
     .error{color:#b00020}
     #reader{
@@ -57,7 +57,7 @@
 </head>
 <body>
   <header>
-    <h1>Извличане на статии и показване в Reader</h1>
+    <h1>Извличане на статии + ArticleBody JSON-LD Reader</h1>
     <p>Въведи URL на новинарска страница:</p>
     <input id="url" type="url" placeholder="https://примерен-сайт.bg/новини" required>
     <br>
@@ -136,23 +136,34 @@
       try{
         const html = await fetchHTML(articleURL);
         const doc = new DOMParser().parseFromString(html, "text/html");
-        let articleBody = "";
+        let articleText = "";
 
-        // 1) директен текст след "Articlebody:"
-        const idx = html.indexOf("Articlebody:");
-        if(idx !== -1){
-          articleBody = html.slice(idx + 12).split(/<\/?(script|div|section|article|footer)/i)[0];
-        } else {
-          // 2) или контейнер с клас/id съдържащ "articlebody"
-          const el = doc.querySelector('[class*="articlebody" i], [id*="articlebody" i]');
-          articleBody = el ? el.innerHTML : "";
+        // 1️⃣ Намери всички <script type="application/ld+json">
+        const scripts = [...doc.querySelectorAll('script[type="application/ld+json"]')];
+        for(const s of scripts){
+          try{
+            const json = JSON.parse(s.textContent.trim());
+            if(json.articleBody){
+              articleText = json.articleBody;
+              break;
+            }
+            // някои сайтове имат масив от обекти
+            if(Array.isArray(json)){
+              const found = json.find(x => x.articleBody);
+              if(found){ articleText = found.articleBody; break; }
+            }
+          }catch(e){ /* пропуска грешен JSON */ }
         }
 
-        if(!articleBody){
-          readerContent.innerHTML = `<h2>${title}</h2><p>⚠️ Не е намерен текст с "Articlebody:".</p>`;
-        }else{
-          readerContent.innerHTML = `<h2>${title}</h2>${articleBody}`;
+        if(!articleText){
+          articleText = "⚠️ Не е намерен articleBody в JSON-LD секцията.";
         }
+
+        // 2️⃣ Покажи в reader
+        readerContent.innerHTML = `
+          <h2>${title}</h2>
+          <div style="white-space:pre-wrap;">${articleText}</div>
+        `;
 
         resultsEl.style.display="none";
         readerEl.style.display="block";
