@@ -2,25 +2,63 @@
 <html lang="bg">
 <head>
   <meta charset="utf-8">
-  <title>Извличане на статии (gtag-feed-statia*)</title>
+  <title>Новинарски Reader (gtag-feed-statia)</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
-    body{font:16px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin:1.5rem; color:#111; background:#fafafa}
+    body{
+      font:16px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      margin:1.5rem;
+      color:#111;
+      background:#fafafa;
+    }
     header{margin-bottom:1rem}
-    input[type=url]{width:100%; max-width:780px; padding:.6rem .8rem; font-size:1rem}
-    button{padding:.6rem .9rem; font-size:1rem; cursor:pointer; margin-top:.5rem}
-    .status{margin:.75rem 0; color:#555}
-    .results{margin-top:1rem}
-    .item{background:#fff; border:1px solid #e5e5e5; border-radius:.5rem; padding:.75rem .9rem; margin:.5rem 0}
-    .item a{word-break:break-all; text-decoration:none}
-    .item small{display:block; color:#666; margin-top:.25rem}
+    input[type=url]{width:100%;max-width:780px;padding:.6rem .8rem;font-size:1rem}
+    button{padding:.6rem .9rem;font-size:1rem;cursor:pointer;margin-top:.5rem}
+    .status{margin:.75rem 0;color:#555}
+    .results{margin-top:1rem;display:grid;gap:1rem}
+    .item{
+      background:#fff;
+      border:1px solid #e5e5e5;
+      border-radius:.75rem;
+      padding:.75rem .9rem;
+      display:grid;
+      grid-template-columns:120px 1fr;
+      gap:1rem;
+      align-items:start;
+      cursor:pointer;
+      transition:background .2s;
+    }
+    .item:hover{background:#f0f6ff}
+    .item img{width:120px;height:80px;object-fit:cover;border-radius:.5rem}
+    .item a{color:#0047ab;text-decoration:none;font-weight:600}
+    .item small{display:block;color:#666;margin-top:.25rem}
     .error{color:#b00020}
+    #reader{
+      background:#fff;
+      border:1px solid #ddd;
+      border-radius:.75rem;
+      padding:1rem 1.2rem;
+      margin-top:1.5rem;
+      box-shadow:0 2px 5px rgba(0,0,0,.05);
+    }
+    #reader h2{margin-top:0}
+    #backBtn{
+      background:#0047ab;
+      color:#fff;
+      padding:.5rem .8rem;
+      border:none;
+      border-radius:.4rem;
+      cursor:pointer;
+      font-size:.9rem;
+      margin-bottom:1rem;
+    }
+    #readerContent p{margin:.6rem 0;line-height:1.6}
   </style>
 </head>
 <body>
   <header>
-    <h1>Извади линкове и текст от <code>gtag-feed-statia*</code></h1>
-    <p>Въведи URL на страница от новинарски сайт:</p>
+    <h1>Извличане на статии и показване в Reader</h1>
+    <p>Въведи URL на новинарска страница:</p>
     <input id="url" type="url" placeholder="https://примерен-сайт.bg/новини" required>
     <br>
     <button id="go">Извлечи</button>
@@ -29,16 +67,28 @@
 
   <section id="results" class="results"></section>
 
+  <section id="reader" style="display:none;">
+    <button id="backBtn">← Назад към списъка</button>
+    <div id="readerContent"></div>
+  </section>
+
   <script>
     const $ = s => document.querySelector(s);
-    const statusEl = $("#status");
     const resultsEl = $("#results");
-    const urlInput = $("#url");
-    const goBtn = $("#go");
+    const readerEl = $("#reader");
+    const readerContent = $("#readerContent");
+    const statusEl = $("#status");
 
-    function setStatus(msg, isError=false){
+    function setStatus(msg, err=false){
       statusEl.textContent = msg || "";
-      statusEl.className = "status" + (isError ? " error" : "");
+      statusEl.className = "status" + (err ? " error" : "");
+    }
+
+    async function fetchHTML(url){
+      const api = "https://api.allorigins.win/raw?url=" + encodeURIComponent(url);
+      const res = await fetch(api, {cache:"no-store"});
+      if(!res.ok) throw new Error("HTTP " + res.status);
+      return await res.text();
     }
 
     function absolutize(href, base){
@@ -46,71 +96,91 @@
       catch { return href; }
     }
 
-    async function fetchRawHTML(targetURL){
-      // Използваме AllOrigins за да избегнем CORS
-      const api = "https://api.allorigins.win/raw?url=" + encodeURIComponent(targetURL);
-      const res = await fetch(api, {cache: "no-store"});
-      if(!res.ok) throw new Error("HTTP " + res.status);
-      return await res.text();
+    function extractList(html, base){
+      const doc = new DOMParser().parseFromString(html, "text/html");
+      const anchors = [...doc.querySelectorAll('a[class*="gtag-feed-statia"]')];
+      return anchors.map(a=>{
+        const container = a.closest("article, div, li") || a.parentElement;
+        const img = container?.querySelector("img")?.src || "";
+        const timeEl = container?.querySelector("time");
+        const date = timeEl?.getAttribute("datetime") || timeEl?.textContent?.trim() || "";
+        return {
+          href: absolutize(a.getAttribute("href"), base),
+          title: (a.textContent || a.title || "").trim(),
+          img: img ? absolutize(img, base) : "",
+          date
+        };
+      }).filter(x=>x.href && x.title);
     }
 
-    function extractLinks(html, baseHref){
-      const dom = new DOMParser().parseFromString(html, "text/html");
-
-      // Търсим <a> с клас, който съдържа 'gtag-feed-statia'
-      // (не изискваме задължително 'flex-grow-1', за да обхванем и леко различни варианти)
-      const anchors = dom.querySelectorAll('a[class*="gtag-feed-statia"]');
-
-      // Филтър: ако желаеш строго и 'flex-grow-1', разкоментирай реда отдолу:
-      // const anchors = [...dom.querySelectorAll('a[class*="gtag-feed-statia"]')].filter(a => a.classList.contains('flex-grow-1'));
-
-      return [...anchors].map(a => ({
-        href: absolutize(a.getAttribute("href") || "", baseHref),
-        text: (a.textContent || "").trim(),
-        title: (a.getAttribute("title") || "").trim()
-      })).filter(x => x.href);
-    }
-
-    function render(items){
+    function renderList(items){
       resultsEl.innerHTML = "";
-      if(items.length === 0){
-        resultsEl.innerHTML = "<p>Нищо не е намерено за <code>gtag-feed-statia*</code>.</p>";
-        return;
-      }
-      const frag = document.createDocumentFragment();
-      items.forEach((it, i) => {
+      if(!items.length){ resultsEl.textContent = "Няма намерени статии."; return; }
+      items.forEach(it=>{
         const div = document.createElement("div");
         div.className = "item";
         div.innerHTML = `
-          <strong>${i+1}.</strong>
-          <a href="${it.href}" target="_blank" rel="noopener">${it.text || it.title || it.href}</a>
-          <small>${it.title ? ("title: " + it.title + " · ") : ""}${it.href}</small>
-        `;
-        frag.appendChild(div);
+          ${it.img ? `<img src="${it.img}" alt="">` : `<div style="width:120px;height:80px;background:#ddd;border-radius:.5rem;"></div>`}
+          <div>
+            <div class="title">${it.title}</div>
+            ${it.date ? `<small>${it.date}</small>` : ""}
+            <small>${it.href}</small>
+          </div>`;
+        div.addEventListener("click", ()=>openReader(it.href, it.title));
+        resultsEl.appendChild(div);
       });
-      resultsEl.appendChild(frag);
     }
 
-    async function run(){
-      const target = (urlInput.value || "").trim();
-      if(!target){ setStatus("Моля, въведи валиден URL.", true); return; }
-      setStatus("⏳ Зареждам HTML…");
-      resultsEl.innerHTML = "";
-
+    async function openReader(articleURL, title){
+      setStatus("⏳ Зареждам статията...");
       try{
-        const html = await fetchRawHTML(target);
-        setStatus("✅ HTML зареден. Парсирам…");
-        const items = extractLinks(html, target);
-        render(items);
-        setStatus("Готово.");
-      }catch(err){
-        console.error(err);
-        setStatus("❌ Грешка при зареждане/парсване: " + err.message, true);
+        const html = await fetchHTML(articleURL);
+        const doc = new DOMParser().parseFromString(html, "text/html");
+        let articleBody = "";
+
+        // 1) директен текст след "Articlebody:"
+        const idx = html.indexOf("Articlebody:");
+        if(idx !== -1){
+          articleBody = html.slice(idx + 12).split(/<\/?(script|div|section|article|footer)/i)[0];
+        } else {
+          // 2) или контейнер с клас/id съдържащ "articlebody"
+          const el = doc.querySelector('[class*="articlebody" i], [id*="articlebody" i]');
+          articleBody = el ? el.innerHTML : "";
+        }
+
+        if(!articleBody){
+          readerContent.innerHTML = `<h2>${title}</h2><p>⚠️ Не е намерен текст с "Articlebody:".</p>`;
+        }else{
+          readerContent.innerHTML = `<h2>${title}</h2>${articleBody}`;
+        }
+
+        resultsEl.style.display="none";
+        readerEl.style.display="block";
+        setStatus("");
+      }catch(e){
+        console.error(e);
+        setStatus("❌ Грешка при зареждане: " + e.message, true);
       }
     }
 
-    goBtn.addEventListener("click", run);
-    urlInput.addEventListener("keydown", e => { if(e.key === "Enter") run(); });
+    $("#backBtn").onclick = ()=>{
+      readerEl.style.display="none";
+      resultsEl.style.display="grid";
+    };
+
+    $("#go").onclick = async ()=>{
+      const url = $("#url").value.trim();
+      if(!url){ setStatus("Моля, въведи валиден URL.", true); return; }
+      setStatus("⏳ Зареждам списъка…");
+      try{
+        const html = await fetchHTML(url);
+        const items = extractList(html, url);
+        renderList(items);
+        setStatus("✅ Готово. Намерени: " + items.length);
+      }catch(e){
+        setStatus("❌ Грешка: " + e.message, true);
+      }
+    };
   </script>
 </body>
 </html>
