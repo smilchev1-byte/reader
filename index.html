@@ -1,197 +1,332 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="bg">
 <head>
-  <meta charset="utf-8">
-  <title>Новинарски Reader с articleBody JSON-LD</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <style>
-    body{
-      font:16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-      margin:1.5rem;
-      color:#111;
-      background:#fafafa;
-    }
-    header{margin-bottom:1rem}
-    input[type=url]{width:100%;max-width:780px;padding:.6rem .8rem;font-size:1rem}
-    button{padding:.6rem .9rem;font-size:1rem;cursor:pointer;margin-top:.5rem}
-    .status{margin:.75rem 0;color:#555}
-    .results{margin-top:1rem;display:grid;gap:1rem}
-    .item{
-      background:#fff;
-      border:1px solid #e5e5e5;
-      border-radius:.75rem;
-      padding:.75rem .9rem;
-      display:grid;
-      grid-template-columns:120px 1fr;
-      gap:1rem;
-      align-items:start;
-      cursor:pointer;
-      transition:background .2s;
-    }
-    .item:hover{background:#f0f6ff}
-    .item img{width:120px;height:80px;object-fit:cover;border-radius:.5rem}
-    .item .title{font-weight:600;color:#0047ab}
-    .item small{display:block;color:#666;margin-top:.25rem}
-    .error{color:#b00020}
-    #reader{
-      background:#fff;
-      border:1px solid #ddd;
-      border-radius:.75rem;
-      padding:1rem 1.2rem;
-      margin-top:1.5rem;
-      box-shadow:0 2px 5px rgba(0,0,0,.05);
-    }
-    #reader h2{margin-top:0}
-    #backBtn{
-      background:#0047ab;
-      color:#fff;
-      padding:.5rem .8rem;
-      border:none;
-      border-radius:.4rem;
-      cursor:pointer;
-      font-size:.9rem;
-      margin-bottom:1rem;
-    }
-    #readerContent p{margin:.6rem 0;line-height:1.6}
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini Receipt Analyzer</title>
+    <style>
+        :root {
+            --primary: #4285f4;
+            --bg: #f0f2f5;
+            --card: #ffffff;
+            --text: #333;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            max-width: 600px;
+            width: 100%;
+            background: var(--card);
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        h1 { text-align: center; color: var(--primary); margin-bottom: 1.5rem; }
+
+        .input-group { margin-bottom: 1.5rem; }
+        
+        label { display: block; margin-bottom: 0.5rem; font-weight: bold; }
+        
+        input[type="text"], input[type="password"], textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 1rem;
+        }
+
+        input[type="file"] {
+            width: 100%;
+            padding: 10px;
+            background: #f8f9fa;
+            border: 2px dashed #ccc;
+            border-radius: 6px;
+            text-align: center;
+            cursor: pointer;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        button:hover { background-color: #3367d6; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+
+        .preview-container {
+            text-align: center;
+            margin: 1rem 0;
+            display: none;
+        }
+
+        .preview-container img {
+            max-width: 100%;
+            max-height: 300px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+        }
+
+        #results { margin-top: 2rem; }
+
+        .category-card {
+            background: #f8f9fa;
+            border-left: 5px solid var(--primary);
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-radius: 4px;
+        }
+
+        .category-title {
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .item-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .total-row {
+            margin-top: 10px;
+            font-weight: bold;
+            text-align: right;
+            color: var(--primary);
+        }
+
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--primary);
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+            display: none;
+        }
+
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        .error { color: red; text-align: center; margin-top: 10px; }
+    </style>
 </head>
 <body>
-  <header>
-    <h1>Извличане на статии + ArticleBody JSON-LD Reader</h1>
-    <p>Въведи URL на новинарска страница:</p>
-    <input id="url" type="url" placeholder="https://примерен-сайт.bg/новини" required>
-    <br>
-    <button id="go">Извлечи</button>
-    <div id="status" class="status"></div>
-  </header>
 
-  <section id="results" class="results"></section>
+<div class="container">
+    <h1>🧾 Анализатор на Бележки</h1>
 
-  <section id="reader" style="display:none;">
-    <button id="backBtn">← Назад към списъка</button>
-    <div id="readerContent"></div>
-  </section>
+    <div class="input-group">
+        <label for="apiKey">Gemini API Key:</label>
+        <input type="password" id="apiKey" placeholder="Постави своя API Key тук">
+        <small style="color: #666; font-size: 0.8rem;">Ключът се използва само локално в браузъра.</small>
+    </div>
 
-  <script>
-    const $ = s => document.querySelector(s);
-    const resultsEl = $("#results");
-    const readerEl = $("#reader");
-    const readerContent = $("#readerContent");
-    const statusEl = $("#status");
+    <div class="input-group">
+        <label for="categories">Категории (разделени със запетая):</label>
+        <textarea id="categories" rows="2">Храна, Напитки, Бит, Транспорт, Дрехи, Други</textarea>
+    </div>
 
-    function setStatus(msg, err=false){
-      statusEl.textContent = msg || "";
-      statusEl.className = "status" + (err ? " error" : "");
-    }
+    <div class="input-group">
+        <label for="fileInput">Избери снимка на бележка:</label>
+        <input type="file" id="fileInput" accept="image/*">
+    </div>
 
-    async function fetchHTML(url){
-      const api = "https://api.allorigins.win/raw?url=" + encodeURIComponent(url);
-      const res = await fetch(api, {cache:"no-store"});
-      if(!res.ok) throw new Error("HTTP " + res.status);
-      return await res.text();
-    }
+    <div class="preview-container" id="previewContainer">
+        <img id="imagePreview" src="" alt="Preview">
+    </div>
 
-    function absolutize(href, base){
-      try { return new URL(href, base).toString(); }
-      catch { return href; }
-    }
+    <button id="analyzeBtn" onclick="processReceipt()">Анализирай Бележката</button>
+    
+    <div id="loader" class="loader"></div>
+    <div id="errorMsg" class="error"></div>
+    
+    <div id="results"></div>
+</div>
 
-    function extractList(html, base){
-      const doc = new DOMParser().parseFromString(html, "text/html");
-      const anchors = [...doc.querySelectorAll('a[class*="gtag-feed-statia"]')];
-      return anchors.map(a=>{
-        const container = a.closest("article, div, li") || a.parentElement;
-        const img = container?.querySelector("img")?.src || "";
-        const timeEl = container?.querySelector("time");
-        const date = timeEl?.getAttribute("datetime") || timeEl?.textContent?.trim() || "";
-        return {
-          href: absolutize(a.getAttribute("href"), base),
-          title: (a.textContent || a.title || "").trim(),
-          img: img ? absolutize(img, base) : "",
-          date
-        };
-      }).filter(x=>x.href && x.title);
-    }
+<script type="module">
+    import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
 
-    function renderList(items){
-      resultsEl.innerHTML = "";
-      if(!items.length){ resultsEl.textContent = "Няма намерени статии."; return; }
-      items.forEach(it=>{
-        const div = document.createElement("div");
-        div.className = "item";
-        div.innerHTML = `
-          ${it.img ? `<img src="${it.img}" alt="">` : `<div style="width:120px;height:80px;background:#ddd;border-radius:.5rem;"></div>`}
-          <div>
-            <div class="title">${it.title}</div>
-            ${it.date ? `<small>${it.date}</small>` : ""}
-            <small>${it.href}</small>
-          </div>`;
-        div.addEventListener("click", ()=>openReader(it.href, it.title));
-        resultsEl.appendChild(div);
-      });
-    }
+    // Елементи от DOM
+    const fileInput = document.getElementById('fileInput');
+    const imagePreview = document.getElementById('imagePreview');
+    const previewContainer = document.getElementById('previewContainer');
+    const analyzeBtn = document.getElementById('analyzeBtn');
+    const loader = document.getElementById('loader');
+    const resultsDiv = document.getElementById('results');
+    const errorDiv = document.getElementById('errorMsg');
 
-    async function openReader(articleURL, title){
-      setStatus("⏳ Зареждам статията...");
-      try{
-        const html = await fetchHTML(articleURL);
-        const doc = new DOMParser().parseFromString(html, "text/html");
-        let articleText = "";
-
-        // 1️⃣ Намери всички <script type="application/ld+json">
-        const scripts = [...doc.querySelectorAll('script[type="application/ld+json"]')];
-        for(const s of scripts){
-          try{
-            const json = JSON.parse(s.textContent.trim());
-            if(json.articleBody){
-              articleText = json.articleBody;
-              break;
+    // Предварителен преглед на снимката
+    fileInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                imagePreview.src = e.target.result;
+                previewContainer.style.display = 'block';
             }
-            // някои сайтове имат масив от обекти
-            if(Array.isArray(json)){
-              const found = json.find(x => x.articleBody);
-              if(found){ articleText = found.articleBody; break; }
+            reader.readAsDataURL(file);
+        }
+    });
+
+    // Основна функция, закачена за window за достъп от HTML
+    window.processReceipt = async function() {
+        const apiKey = document.getElementById('apiKey').value;
+        const categories = document.getElementById('categories').value;
+        const file = fileInput.files[0];
+
+        // Валидация
+        if (!apiKey) { alert("Моля, въведете API Key."); return; }
+        if (!file) { alert("Моля, изберете снимка."); return; }
+
+        // UI състояние "Зареждане"
+        analyzeBtn.disabled = true;
+        analyzeBtn.innerText = "Обработване...";
+        loader.style.display = 'block';
+        resultsDiv.innerHTML = '';
+        errorDiv.innerText = '';
+
+        try {
+            // Конвертиране на файла към Base64
+            const base64Data = await fileToGenerativePart(file);
+
+            // Инициализация на Gemini
+            const genAI = new GoogleGenerativeAI(apiKey);
+            // Използваме модела Flash, защото е бърз и евтин/безплатен
+            const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+            // Създаване на промпта
+            const prompt = `
+                Ти си експерт по счетоводство и OCR. 
+                Разгледай тази снимка на касова бележка.
+                Извади всички артикули и техните цени.
+                Разпредели всеки артикул в една от следните категории: ${categories}.
+                Ако артикулът не пасва идеално, използвай "Други" или най-близката категория.
+                
+                Върни резултата САМО като валиден JSON масив, без Markdown форматиране (без \`\`\`json).
+                Структурата трябва да бъде:
+                [
+                    {
+                        "category": "Име на категорията",
+                        "total": 10.50,
+                        "items": [
+                            {"name": "Мляко", "price": 2.50},
+                            {"name": "Хляб", "price": 1.20}
+                        ]
+                    }
+                ]
+                Увери се, че цените са числа, а не стрингове.
+            `;
+
+            // Изпращане към API
+            const result = await model.generateContent([prompt, base64Data]);
+            const response = await result.response;
+            let text = response.text();
+
+            // Почистване на JSON-а (понякога Gemini слага ```json в началото)
+            text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+            
+            const data = JSON.parse(text);
+            renderResults(data);
+
+        } catch (error) {
+            console.error(error);
+            errorDiv.innerText = "Възникна грешка: " + error.message;
+            if (error.message.includes("API key")) {
+                errorDiv.innerText += " (Проверете дали ключът е валиден).";
             }
-          }catch(e){ /* пропуска грешен JSON */ }
+        } finally {
+            analyzeBtn.disabled = false;
+            analyzeBtn.innerText = "Анализирай Бележката";
+            loader.style.display = 'none';
+        }
+    };
+
+    // Помощна функция за конвертиране на файла
+    async function fileToGenerativePart(file) {
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const base64Data = reader.result.split(',')[1];
+                resolve({
+                    inlineData: {
+                        data: base64Data,
+                        mimeType: file.type
+                    }
+                });
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    // Визуализация на данните
+    function renderResults(data) {
+        if (!data || data.length === 0) {
+            resultsDiv.innerHTML = '<p>Не бяха намерени данни.</p>';
+            return;
         }
 
-        if(!articleText){
-          articleText = "⚠️ Не е намерен articleBody в JSON-LD секцията.";
-        }
+        let html = '';
+        let grandTotal = 0;
 
-        // 2️⃣ Покажи в reader
-        readerContent.innerHTML = `
-          <h2>${title}</h2>
-          <div style="white-space:pre-wrap;">${articleText}</div>
+        data.forEach(cat => {
+            if (cat.items.length > 0) {
+                let catTotal = 0;
+                let itemsHtml = '';
+                
+                cat.items.forEach(item => {
+                    catTotal += item.price;
+                    itemsHtml += `
+                        <div class="item-row">
+                            <span>${item.name}</span>
+                            <span>${item.price.toFixed(2)} лв.</span>
+                        </div>
+                    `;
+                });
+                grandTotal += catTotal;
+
+                html += `
+                    <div class="category-card">
+                        <div class="category-title">
+                            ${cat.category}
+                            <span>${catTotal.toFixed(2)} лв.</span>
+                        </div>
+                        ${itemsHtml}
+                    </div>
+                `;
+            }
+        });
+
+        html += `
+            <div style="text-align: right; font-size: 1.5rem; font-weight: bold; margin-top: 20px; color: var(--primary);">
+                ОБЩО: ${grandTotal.toFixed(2)} лв.
+            </div>
         `;
 
-        resultsEl.style.display="none";
-        readerEl.style.display="block";
-        setStatus("");
-      }catch(e){
-        console.error(e);
-        setStatus("❌ Грешка при зареждане: " + e.message, true);
-      }
+        resultsDiv.innerHTML = html;
     }
+</script>
 
-    $("#backBtn").onclick = ()=>{
-      readerEl.style.display="none";
-      resultsEl.style.display="grid";
-    };
-
-    $("#go").onclick = async ()=>{
-      const url = $("#url").value.trim();
-      if(!url){ setStatus("Моля, въведи валиден URL.", true); return; }
-      setStatus("⏳ Зареждам списъка…");
-      try{
-        const html = await fetchHTML(url);
-        const items = extractList(html, url);
-        renderList(items);
-        setStatus("✅ Готово. Намерени: " + items.length);
-      }catch(e){
-        setStatus("❌ Грешка: " + e.message, true);
-      }
-    };
-  </script>
 </body>
 </html>
