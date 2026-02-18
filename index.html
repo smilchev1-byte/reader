@@ -109,13 +109,6 @@
             border-bottom: 1px solid #eee;
         }
 
-        .total-row {
-            margin-top: 10px;
-            font-weight: bold;
-            text-align: right;
-            color: var(--primary);
-        }
-
         .loader {
             border: 4px solid #f3f3f3;
             border-top: 4px solid var(--primary);
@@ -129,13 +122,22 @@
 
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         
-        .error { color: red; text-align: center; margin-top: 10px; }
+        .error { 
+            color: #d32f2f; 
+            background: #fdecea; 
+            padding: 10px; 
+            border-radius: 4px;
+            text-align: center; 
+            margin-top: 10px; 
+            display: none;
+            word-wrap: break-word;
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>🧾 Анализатор на Бележки</h1>
+    <h1>🧾 Анализатор на Бележки 2</h1>
 
     <div class="input-group">
         <label for="apiKey">Gemini API Key:</label>
@@ -166,9 +168,9 @@
 </div>
 
 <script type="module">
-    import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
+    // ПРОМЯНА: Използваме изрично "latest" версията, за да поддържа Flash модела
+    import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai@latest";
 
-    // Елементи от DOM
     const fileInput = document.getElementById('fileInput');
     const imagePreview = document.getElementById('imagePreview');
     const previewContainer = document.getElementById('previewContainer');
@@ -177,7 +179,6 @@
     const resultsDiv = document.getElementById('results');
     const errorDiv = document.getElementById('errorMsg');
 
-    // Предварителен преглед на снимката
     fileInput.addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (file) {
@@ -185,66 +186,60 @@
             reader.onload = function(e) {
                 imagePreview.src = e.target.result;
                 previewContainer.style.display = 'block';
+                resultsDiv.innerHTML = ''; 
+                errorDiv.style.display = 'none';
             }
             reader.readAsDataURL(file);
         }
     });
 
-    // Основна функция, закачена за window за достъп от HTML
     window.processReceipt = async function() {
-        const apiKey = document.getElementById('apiKey').value;
+        const apiKey = document.getElementById('apiKey').value.trim();
         const categories = document.getElementById('categories').value;
         const file = fileInput.files[0];
 
-        // Валидация
-        if (!apiKey) { alert("Моля, въведете API Key."); return; }
-        if (!file) { alert("Моля, изберете снимка."); return; }
+        errorDiv.style.display = 'none';
+        errorDiv.innerText = '';
 
-        // UI състояние "Зареждане"
+        if (!apiKey) { showError("Моля, въведете API Key."); return; }
+        if (!file) { showError("Моля, изберете снимка."); return; }
+
         analyzeBtn.disabled = true;
         analyzeBtn.innerText = "Обработване...";
         loader.style.display = 'block';
         resultsDiv.innerHTML = '';
-        errorDiv.innerText = '';
 
         try {
-            // Конвертиране на файла към Base64
             const base64Data = await fileToGenerativePart(file);
 
-            // Инициализация на Gemini
             const genAI = new GoogleGenerativeAI(apiKey);
-            // Използваме модела Flash, защото е бърз и евтин/безплатен
+            // Използваме 'gemini-1.5-flash', който е най-бърз и евтин
             const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-            // Създаване на промпта
             const prompt = `
-                Ти си експерт по счетоводство и OCR. 
-                Разгледай тази снимка на касова бележка.
-                Извади всички артикули и техните цени.
-                Разпредели всеки артикул в една от следните категории: ${categories}.
-                Ако артикулът не пасва идеално, използвай "Други" или най-близката категория.
+                Ти си счетоводен асистент. Анализирай тази касова бележка.
+                Извади всички закупени артикули и техните цени.
+                Разпредели всеки артикул в една от тези категории: ${categories}.
+                Ако нещо не е ясно, сложи го в "Други".
                 
-                Върни резултата САМО като валиден JSON масив, без Markdown форматиране (без \`\`\`json).
-                Структурата трябва да бъде:
+                Върни резултата САМО като чист JSON масив (без markdown):
                 [
                     {
-                        "category": "Име на категорията",
-                        "total": 10.50,
+                        "category": "Храна",
                         "items": [
-                            {"name": "Мляко", "price": 2.50},
-                            {"name": "Хляб", "price": 1.20}
+                            {"name": "Хляб", "price": 1.50},
+                            {"name": "Сирене", "price": 8.20}
                         ]
                     }
                 ]
-                Увери се, че цените са числа, а не стрингове.
+                Важно: Цените трябва да са числа.
             `;
 
-            // Изпращане към API
             const result = await model.generateContent([prompt, base64Data]);
             const response = await result.response;
             let text = response.text();
 
-            // Почистване на JSON-а (понякога Gemini слага ```json в началото)
+            // Почистване на response text
             text = text.replace(/```json/g, '').replace(/```/g, '').trim();
             
             const data = JSON.parse(text);
@@ -252,10 +247,13 @@
 
         } catch (error) {
             console.error(error);
-            errorDiv.innerText = "Възникна грешка: " + error.message;
-            if (error.message.includes("API key")) {
-                errorDiv.innerText += " (Проверете дали ключът е валиден).";
-            }
+            let msg = "Възникна грешка: " + error.message;
+            
+            // По-ясни съобщения за често срещани грешки
+            if (error.message.includes("404")) msg = "Грешка 404: Моделът не е намерен или API ключът не е активиран за този модел.";
+            if (error.message.includes("API key")) msg = "Невалиден API Key.";
+            
+            showError(msg);
         } finally {
             analyzeBtn.disabled = false;
             analyzeBtn.innerText = "Анализирай Бележката";
@@ -263,7 +261,11 @@
         }
     };
 
-    // Помощна функция за конвертиране на файла
+    function showError(msg) {
+        errorDiv.innerText = msg;
+        errorDiv.style.display = 'block';
+    }
+
     async function fileToGenerativePart(file) {
         return new Promise((resolve) => {
             const reader = new FileReader();
@@ -280,7 +282,6 @@
         });
     }
 
-    // Визуализация на данните
     function renderResults(data) {
         if (!data || data.length === 0) {
             resultsDiv.innerHTML = '<p>Не бяха намерени данни.</p>';
@@ -291,7 +292,7 @@
         let grandTotal = 0;
 
         data.forEach(cat => {
-            if (cat.items.length > 0) {
+            if (cat.items && cat.items.length > 0) {
                 let catTotal = 0;
                 let itemsHtml = '';
                 
