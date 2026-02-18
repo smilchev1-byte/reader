@@ -37,7 +37,7 @@
         
         label { display: block; margin-bottom: 0.5rem; font-weight: bold; }
         
-        input[type="text"], input[type="password"], textarea {
+        textarea {
             width: 100%;
             padding: 10px;
             border: 1px solid #ccc;
@@ -130,20 +130,14 @@
             text-align: center; 
             margin-top: 10px; 
             display: none;
-            word-wrap: break-word;
+            word-wrap: break-word; 
         }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>🧾 Анализатор на Бележки 2</h1>
-
-    <div class="input-group">
-        <label for="apiKey">Gemini API Key:</label>
-        <input type="password" id="apiKey" placeholder="Постави своя API Key тук">
-        <small style="color: #666; font-size: 0.8rem;">Ключът се използва само локално в браузъра.</small>
-    </div>
+    <h1>🧾 Анализатор на Бележки</h1>
 
     <div class="input-group">
         <label for="categories">Категории (разделени със запетая):</label>
@@ -168,8 +162,12 @@
 </div>
 
 <script type="module">
-    // ПРОМЯНА: Използваме изрично "latest" версията, за да поддържа Flash модела
-    import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai@latest";
+    // Импортираме най-новата версия, за да сме сигурни, че поддържа 1.5-flash
+    import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
+
+    // --- ТВОЯТ API KEY Е ВГРАДЕН ТУК ---
+    const API_KEY = "AIzaSyBl__uqkL0rY5h9saUZYrxeHxJOV66EPn4";
+    // ------------------------------------
 
     const fileInput = document.getElementById('fileInput');
     const imagePreview = document.getElementById('imagePreview');
@@ -186,7 +184,7 @@
             reader.onload = function(e) {
                 imagePreview.src = e.target.result;
                 previewContainer.style.display = 'block';
-                resultsDiv.innerHTML = ''; 
+                resultsDiv.innerHTML = '';
                 errorDiv.style.display = 'none';
             }
             reader.readAsDataURL(file);
@@ -194,14 +192,11 @@
     });
 
     window.processReceipt = async function() {
-        const apiKey = document.getElementById('apiKey').value.trim();
         const categories = document.getElementById('categories').value;
         const file = fileInput.files[0];
 
         errorDiv.style.display = 'none';
-        errorDiv.innerText = '';
-
-        if (!apiKey) { showError("Моля, въведете API Key."); return; }
+        
         if (!file) { showError("Моля, изберете снимка."); return; }
 
         analyzeBtn.disabled = true;
@@ -211,48 +206,54 @@
 
         try {
             const base64Data = await fileToGenerativePart(file);
-
-            const genAI = new GoogleGenerativeAI(apiKey);
-            // Използваме 'gemini-1.5-flash', който е най-бърз и евтин
+            const genAI = new GoogleGenerativeAI(API_KEY);
+            
+            // Използваме gemini-1.5-flash. Ако даде грешка, смени на 'gemini-pro-vision'
             const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
             const prompt = `
-                Ти си счетоводен асистент. Анализирай тази касова бележка.
-                Извади всички закупени артикули и техните цени.
-                Разпредели всеки артикул в една от тези категории: ${categories}.
-                Ако нещо не е ясно, сложи го в "Други".
+                Ти си счетоводен асистент. 
+                Разгледай тази снимка на касова бележка (Receipt OCR).
+                Извади списък с всички закупени стоки и техните цени.
+                След това групирай всеки артикул в една от тези категории: ${categories}.
                 
-                Върни резултата САМО като чист JSON масив (без markdown):
+                Върни резултата САМО като JSON масив, без никакъв друг текст или markdown:
                 [
                     {
                         "category": "Храна",
                         "items": [
-                            {"name": "Хляб", "price": 1.50},
+                            {"name": "Хляб Добруджа", "price": 1.50},
                             {"name": "Сирене", "price": 8.20}
                         ]
                     }
                 ]
-                Важно: Цените трябва да са числа.
+                Цените да са числа (number).
             `;
 
             const result = await model.generateContent([prompt, base64Data]);
             const response = await result.response;
             let text = response.text();
 
-            // Почистване на response text
+            // Изчистване на JSON-а от форматиращи символи
             text = text.replace(/```json/g, '').replace(/```/g, '').trim();
             
-            const data = JSON.parse(text);
-            renderResults(data);
+            try {
+                const data = JSON.parse(text);
+                renderResults(data);
+            } catch (jsonError) {
+                console.error("Грешка при парсване:", text);
+                showError("Gemini върна невалиден JSON. Опитайте отново с по-ясна снимка.");
+            }
 
         } catch (error) {
             console.error(error);
             let msg = "Възникна грешка: " + error.message;
-            
-            // По-ясни съобщения за често срещани грешки
-            if (error.message.includes("404")) msg = "Грешка 404: Моделът не е намерен или API ключът не е активиран за този модел.";
-            if (error.message.includes("API key")) msg = "Невалиден API Key.";
-            
+            if (error.message.includes("404")) {
+                msg = "Грешка 404: Моделът не е намерен. Отиди в Google Cloud Console и активирай 'Generative Language API'.";
+            }
+            if (error.message.includes("400")) {
+                msg = "Грешка 400: Невалидна заявка или проблем със снимката.";
+            }
             showError(msg);
         } finally {
             analyzeBtn.disabled = false;
