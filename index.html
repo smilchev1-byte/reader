@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gemini Receipt Analyzer</title>
     <style>
-        :root {
+        :root {g
             --primary: #4285f4;
             --bg: #f0f2f5;
             --card: #ffffff;
@@ -162,172 +162,128 @@
 </div>
 
 <script type="module">
-    // Импортираме най-новата версия, за да сме сигурни, че поддържа 1.5-flash
-    import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
+  const fileInput = document.getElementById('fileInput');
+  const imagePreview = document.getElementById('imagePreview');
+  const previewContainer = document.getElementById('previewContainer');
+  const analyzeBtn = document.getElementById('analyzeBtn');
+  const loader = document.getElementById('loader');
+  const resultsDiv = document.getElementById('results');
+  const errorDiv = document.getElementById('errorMsg');
 
-    // --- ТВОЯТ API KEY Е ВГРАДЕН ТУК ---
-    const API_KEY = "AIzaSyBl__uqkL0rY5h9saUZYrxeHxJOV66EPn4";
-    // ------------------------------------
-
-    const fileInput = document.getElementById('fileInput');
-    const imagePreview = document.getElementById('imagePreview');
-    const previewContainer = document.getElementById('previewContainer');
-    const analyzeBtn = document.getElementById('analyzeBtn');
-    const loader = document.getElementById('loader');
-    const resultsDiv = document.getElementById('results');
-    const errorDiv = document.getElementById('errorMsg');
-
-    fileInput.addEventListener('change', function(e) {
-        const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                imagePreview.src = e.target.result;
-                previewContainer.style.display = 'block';
-                resultsDiv.innerHTML = '';
-                errorDiv.style.display = 'none';
-            }
-            reader.readAsDataURL(file);
-        }
-    });
-
-    window.processReceipt = async function() {
-        const categories = document.getElementById('categories').value;
-        const file = fileInput.files[0];
-
-        errorDiv.style.display = 'none';
-        
-        if (!file) { showError("Моля, изберете снимка."); return; }
-
-        analyzeBtn.disabled = true;
-        analyzeBtn.innerText = "Обработване...";
-        loader.style.display = 'block';
+  fileInput.addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        imagePreview.src = e.target.result;
+        previewContainer.style.display = 'block';
         resultsDiv.innerHTML = '';
+        errorDiv.style.display = 'none';
+      }
+      reader.readAsDataURL(file);
+    }
+  });
 
-        try {
-            const base64Data = await fileToGenerativePart(file);
-            const genAI = new GoogleGenerativeAI(API_KEY);
-            
-            // Използваме gemini-1.5-flash. Ако даде грешка, смени на 'gemini-pro-vision'
-            const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  window.processReceipt = async function() {
+    const categories = document.getElementById('categories').value;
+    const file = fileInput.files[0];
 
-            const prompt = `
-                Ти си счетоводен асистент. 
-                Разгледай тази снимка на касова бележка (Receipt OCR).
-                Извади списък с всички закупени стоки и техните цени.
-                След това групирай всеки артикул в една от тези категории: ${categories}.
-                
-                Върни резултата САМО като JSON масив, без никакъв друг текст или markdown:
-                [
-                    {
-                        "category": "Храна",
-                        "items": [
-                            {"name": "Хляб Добруджа", "price": 1.50},
-                            {"name": "Сирене", "price": 8.20}
-                        ]
-                    }
-                ]
-                Цените да са числа (number).
-            `;
+    errorDiv.style.display = 'none';
+    if (!file) { showError("Моля, изберете снимка."); return; }
 
-            const result = await model.generateContent([prompt, base64Data]);
-            const response = await result.response;
-            let text = response.text();
+    analyzeBtn.disabled = true;
+    analyzeBtn.innerText = "Обработване...";
+    loader.style.display = 'block';
+    resultsDiv.innerHTML = '';
 
-            // Изчистване на JSON-а от форматиращи символи
-            text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-            
-            try {
-                const data = JSON.parse(text);
-                renderResults(data);
-            } catch (jsonError) {
-                console.error("Грешка при парсване:", text);
-                showError("Gemini върна невалиден JSON. Опитайте отново с по-ясна снимка.");
-            }
+    try {
+      const form = new FormData();
+      form.append("categories", categories);
+      form.append("image", file);
 
-        } catch (error) {
-            console.error(error);
-            let msg = "Възникна грешка: " + error.message;
-            if (error.message.includes("404")) {
-                msg = "Грешка 404: Моделът не е намерен. Отиди в Google Cloud Console и активирай 'Generative Language API'.";
-            }
-            if (error.message.includes("400")) {
-                msg = "Грешка 400: Невалидна заявка или проблем със снимката.";
-            }
-            showError(msg);
-        } finally {
-            analyzeBtn.disabled = false;
-            analyzeBtn.innerText = "Анализирай Бележката";
-            loader.style.display = 'none';
-        }
-    };
+      const resp = await fetch("http://localhost:3000/analyze", {
+        method: "POST",
+        body: form
+      });
 
-    function showError(msg) {
-        errorDiv.innerText = msg;
-        errorDiv.style.display = 'block';
+      const json = await resp.json();
+
+      if (!resp.ok) {
+        throw new Error(json.error || ("HTTP " + resp.status));
+      }
+
+      renderResults(json.data);
+    } catch (error) {
+      showError("Възникна грешка: " + error.message);
+    } finally {
+      analyzeBtn.disabled = false;
+      analyzeBtn.innerText = "Анализирай Бележката";
+      loader.style.display = 'none';
+    }
+  };
+
+  function showError(msg) {
+    errorDiv.innerText = msg;
+    errorDiv.style.display = 'block';
+  }
+
+  function renderResults(data) {
+    if (!data || data.length === 0) {
+      resultsDiv.innerHTML = '<p>Не бяха намерени данни.</p>';
+      return;
     }
 
-    async function fileToGenerativePart(file) {
-        return new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                const base64Data = reader.result.split(',')[1];
-                resolve({
-                    inlineData: {
-                        data: base64Data,
-                        mimeType: file.type
-                    }
-                });
-            };
-            reader.readAsDataURL(file);
+    let html = '';
+    let grandTotal = 0;
+
+    data.forEach(cat => {
+      if (cat.items && cat.items.length > 0) {
+        let catTotal = 0;
+        let itemsHtml = '';
+
+        cat.items.forEach(item => {
+          const price = Number(item.price) || 0;
+          catTotal += price;
+
+          itemsHtml += `
+            <div class="item-row">
+              <span>${escapeHtml(item.name ?? "")}</span>
+              <span>${price.toFixed(2)} лв.</span>
+            </div>
+          `;
         });
-    }
 
-    function renderResults(data) {
-        if (!data || data.length === 0) {
-            resultsDiv.innerHTML = '<p>Не бяха намерени данни.</p>';
-            return;
-        }
-
-        let html = '';
-        let grandTotal = 0;
-
-        data.forEach(cat => {
-            if (cat.items && cat.items.length > 0) {
-                let catTotal = 0;
-                let itemsHtml = '';
-                
-                cat.items.forEach(item => {
-                    catTotal += item.price;
-                    itemsHtml += `
-                        <div class="item-row">
-                            <span>${item.name}</span>
-                            <span>${item.price.toFixed(2)} лв.</span>
-                        </div>
-                    `;
-                });
-                grandTotal += catTotal;
-
-                html += `
-                    <div class="category-card">
-                        <div class="category-title">
-                            ${cat.category}
-                            <span>${catTotal.toFixed(2)} лв.</span>
-                        </div>
-                        ${itemsHtml}
-                    </div>
-                `;
-            }
-        });
+        grandTotal += catTotal;
 
         html += `
-            <div style="text-align: right; font-size: 1.5rem; font-weight: bold; margin-top: 20px; color: var(--primary);">
-                ОБЩО: ${grandTotal.toFixed(2)} лв.
+          <div class="category-card">
+            <div class="category-title">
+              ${escapeHtml(cat.category ?? "")}
+              <span>${catTotal.toFixed(2)} лв.</span>
             </div>
+            ${itemsHtml}
+          </div>
         `;
+      }
+    });
 
-        resultsDiv.innerHTML = html;
-    }
+    html += `
+      <div style="text-align: right; font-size: 1.5rem; font-weight: bold; margin-top: 20px; color: var(--primary);">
+        ОБЩО: ${grandTotal.toFixed(2)} лв.
+      </div>
+    `;
+
+    resultsDiv.innerHTML = html;
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
 </script>
 
 </body>
