@@ -11,7 +11,6 @@
       --panel: #111a2e;
       --text: #e5e7eb;
       --muted: #9ca3af;
-      --danger: #ef4444;
       --border: rgba(255,255,255,0.12);
     }
     body {
@@ -20,11 +19,7 @@
       background: linear-gradient(180deg, #0b1220, #0b1220 40%, #070b14);
       color: var(--text);
     }
-    .wrap {
-      max-width: 980px;
-      margin: 0 auto;
-      padding: 24px 16px 60px;
-    }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 24px 16px 60px; }
     h1 { margin: 0 0 6px; font-size: 26px; }
     .sub { color: var(--muted); margin-bottom: 16px; }
     .card {
@@ -36,7 +31,7 @@
       box-shadow: 0 10px 30px rgba(0,0,0,0.3);
     }
     label { display:block; margin: 10px 0 6px; color: var(--muted); }
-    input[type="text"], textarea {
+    input[type="text"] {
       width: 100%;
       box-sizing: border-box;
       padding: 10px 12px;
@@ -46,19 +41,9 @@
       color: var(--text);
       outline: none;
     }
-    textarea { min-height: 80px; resize: vertical; }
-    input[type="file"] {
-      width: 100%;
-      padding: 10px 0;
-      color: var(--muted);
-    }
-    .row {
-      display: grid;
-      grid-template-columns: 1.2fr 1fr;
-      gap: 14px;
-    }
+    input[type="file"] { width: 100%; padding: 10px 0; color: var(--muted); }
+    .row { display: grid; grid-template-columns: 1.2fr 1fr; gap: 14px; }
     @media (max-width: 820px) { .row { grid-template-columns: 1fr; } }
-
     button {
       margin-top: 12px;
       background: var(--primary);
@@ -72,7 +57,6 @@
       font-size: 15px;
     }
     button:disabled { opacity: 0.65; cursor: not-allowed; }
-
     .error {
       display:none;
       margin-top: 10px;
@@ -83,19 +67,8 @@
       color: #fecaca;
       white-space: pre-wrap;
     }
-
-    .loader {
-      display:none;
-      margin-top: 10px;
-      color: var(--muted);
-    }
-
-    .preview img {
-      max-width: 100%;
-      border-radius: 12px;
-      border: 1px solid var(--border);
-    }
-
+    .loader { display:none; margin-top: 10px; color: var(--muted); }
+    .preview img { max-width: 100%; border-radius: 12px; border: 1px solid var(--border); }
     .category-card {
       border: 1px solid var(--border);
       border-radius: 14px;
@@ -129,7 +102,7 @@
 <body>
   <div class="wrap">
     <h1>Анализ на касова бележка</h1>
-    <div class="sub">GitHub Pages (frontend) + Cloudflare Worker (backend). API ключът не е в браузъра.</div>
+    <div class="sub">GitHub Pages (frontend) + Cloudflare Worker (backend).</div>
 
     <div class="card">
       <div class="row">
@@ -147,7 +120,7 @@
           <div id="errorMsg" class="error"></div>
 
           <div class="tiny">
-            Важно: Ако още не си, първо деплойни Worker и сложи URL-а му в <code>WORKER_URL</code> в кода.
+            Worker endpoint: <code>https://snowy-silence-5bf1.s-milchev1.workers.dev/</code>
           </div>
         </div>
 
@@ -167,8 +140,8 @@
   </div>
 
 <script type="module">
-  // 1) СМЕНИ ТОВА с твоя Cloudflare Worker URL:
-  const WORKER_URL = "https://REPLACE-ME.workers.dev";
+  // Твоят Worker URL:
+  const WORKER_URL = "https://snowy-silence-5bf1.s-milchev1.workers.dev/";
 
   const fileInput = document.getElementById("fileInput");
   const imagePreview = document.getElementById("imagePreview");
@@ -178,15 +151,12 @@
   const errorDiv = document.getElementById("errorMsg");
   const categoriesInput = document.getElementById("categories");
 
-  fileInput.addEventListener("change", async (e) => {
+  fileInput.addEventListener("change", (e) => {
     const file = e.target.files?.[0];
     errorDiv.style.display = "none";
     resultsDiv.innerHTML = "";
-
     if (!file) return;
-
-    const previewUrl = URL.createObjectURL(file);
-    imagePreview.src = previewUrl;
+    imagePreview.src = URL.createObjectURL(file);
   });
 
   analyzeBtn.addEventListener("click", async () => {
@@ -196,18 +166,8 @@
     const file = fileInput.files?.[0];
     const categories = String(categoriesInput.value || "").trim();
 
-    if (!WORKER_URL.includes("workers.dev")) {
-      showError("Смени WORKER_URL в кода с твоя Cloudflare Worker адрес.");
-      return;
-    }
-    if (!categories) {
-      showError("Моля, въведи категории.");
-      return;
-    }
-    if (!file) {
-      showError("Моля, избери снимка.");
-      return;
-    }
+    if (!categories) return showError("Моля, въведи категории.");
+    if (!file) return showError("Моля, избери снимка.");
 
     analyzeBtn.disabled = true;
     loader.style.display = "block";
@@ -215,16 +175,12 @@
     try {
       const { base64, mimeType } = await fileToBase64(file);
 
-      const payload = {
-        categories,
-        imageBase64: base64,
-        mimeType
-      };
+      const payload = { categories, imageBase64: base64, mimeType };
 
       const resp = await fetch(WORKER_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
 
       const text = await resp.text();
@@ -317,8 +273,7 @@
     const buf = await file.arrayBuffer();
     const bytes = new Uint8Array(buf);
 
-    // конвертира Uint8Array -> base64 без да слагаме data:image/...;base64,
-    // защото Gemini иска само суров base64
+    // Uint8Array -> base64
     let binary = "";
     const chunkSize = 0x8000;
     for (let i = 0; i < bytes.length; i += chunkSize) {
